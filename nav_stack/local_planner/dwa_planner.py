@@ -6,7 +6,7 @@ from rclpy.node import Node
 from nav_msgs.msg import Path
 from sensor_msgs.msg import LaserScan
 from nav_msgs.msg import Odometry
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import Twist
 from tf2_geometry_msgs import PointStamped
 from tf2_ros import TransformListener, Buffer
 from tf2_ros.transform_broadcaster import TransformBroadcaster
@@ -18,7 +18,7 @@ import pkg_resources
 from ament_index_python.packages import get_package_share_directory
 import os
 import matplotlib.pyplot as plt
-from tf_transformations import quaternion_from_euler
+from tf_transformations import quaternion_from_euler, euler_from_quaternion
 from visualization_msgs.msg import Marker
 from rclpy.duration import Duration
 from rclpy.time import Time
@@ -32,15 +32,15 @@ class Params():
         self.max_vel = 0.22
         self.min_w = - 2.84 # rad/s
         self.max_w =  2.84 # rad/s
-        self.max_accel = 0.5
-        self.max_w_accel = 2.84
-        self.time_step = 0.3
-        self.time_period = 3.0
+        self.max_accel = 0.3
+        self.max_w_accel = 1.00
+        self.time_step = 0.5
+        self.time_period = 5.0
         self.v_resolution = 0.05
         self.w_resolution = 0.05
-
         self.speed_cost_gain = 10.0
-        self.obstacle_cost_gain = 0.05
+        self.obstacle_cost_gain = 0.5
+        self.goal_cost_gain = 0.8
         
 class DWAFunctions(Node):
     def __init__(self):
@@ -104,6 +104,11 @@ class DWAPlanner(Node):
         self.marker_publisher_ = self.create_subscription(Odometry,'/odom',self.odom_callback, 10)
         self.path_publisher = self.create_subscription(Path, "global_path",self.path_callback, 10)
 
+        self.cmd_vel_pub_ = self.create_publisher(Twist, '/cmd_vel', 10)
+
+        self.v = 0.0
+        self.w = 0.0
+
         self.params = Params()
         self.dwa_functions = DWAFunctions()
 
@@ -116,10 +121,13 @@ class DWAPlanner(Node):
         self.robot_y = 0.0
         self.robot_yaw = 0.0
 
+        self.reached_goal = 0
+
         self.trajectory_range = [0,360]
 
         self.ranges = []
         self.obstacles = []
+        self.waypoint = (0.0,0.0)
     
     def scan_callback(self, scan_msg : LaserScan):
         self.range_data = scan_msg.ranges
@@ -128,7 +136,7 @@ class DWAPlanner(Node):
 
         max_range = 5
 
-        state = [0.0,0.0,0.0,0.0,0.0]
+        state = [self.robot_x,self.robot_y,self.robot_yaw,0.0,0.0]
 
         dw = self.dwa_functions.get_dynamic_window(state, self.params)
         trajs, best_traj = self.local_plan(dw, state, self.params)
@@ -152,18 +160,35 @@ class DWAPlanner(Node):
 
                 x,y = self.scan_to_pose(range_val, theta)
                 self.obstacles.append((x,y))
-        print("scan",len(trajs))
+        # print("best trajecory",best_traj)
+        print("CONTROL COMMAND v = ", best_traj[-1][3], "w = ", best_traj[-1][4])
+
+        self.v = best_traj[-1][3]
+        self.w = best_traj[-1][4]
+
+        if self.reached_goal == 1:
+            self.v = 0.0
+            self.w = 0.0
+
+        vel_msg = Twist()
+
+        vel_msg.linear.x = self.v
+        vel_msg.angular.z = self.w
+
+        self.cmd_vel_pub_.publish(vel_msg)
+
         # print(len(self.obstacles))
         # self.get_logger().info(f"the best trajectory is {best_traj}")
-        for i in range(len(trajs)):
+        # for i in range(len(trajs)):
 
-            plt.plot(trajs[i][:, 0], trajs[i][:, 1], "-r")
+        #     plt.plot(trajs[i][:, 0], trajs[i][:, 1], "-r")
 
-        plt.plot(best_traj[:, 0], best_traj[:, 1], "-g")   
-        plt.show()
+        # plt.plot(best_traj[:, 0], best_traj[:, 1], "-g")   
+        # plt.show()
 
         # self.get_logger().info(f"trajectories {trajs}")
-        
+    
+
 
     def compute_vector(self, vect1, vect2):
         return np.arctan2((vect2[1] - vect1[1]),(vect2[0] - vect1[0])) 
@@ -203,7 +228,13 @@ class DWAPlanner(Node):
 
         self.robot_x = odom_msg.pose.pose.position.x
         self.robot_y = odom_msg.pose.pose.position.y
-        self.robot_yaw = odom_msg.pose.pose.orientation.z
+
+        x = odom_msg.pose.pose.orientation.x
+        y = odom_msg.pose.pose.orientation.y
+        z = odom_msg.pose.pose.orientation.z
+        w = odom_msg.pose.pose.orientation.w
+
+        self.robot_yaw = euler_from_quaternion([x,y,z,w])[2]
         
     # path is defined as a set of waypoints
     # go through the array once and get the distances of all points from the robot
@@ -211,28 +242,59 @@ class DWAPlanner(Node):
     # while you are going through the array check if the robot has reached the proximity with any waypoint, if yes then remove the remaining waypoints before that point
 
     def path_callback(self, path_msg = Path):
+        path = []
+        for i in range(len(path_msg.poses)):
+            wpx,wpy = path_msg.poses[i].pose.position.x,path_msg.poses[i].pose.position.y
 
-        self.global_path = path_msg.poses
-        
+            # if abs(self.robot_x - wpx) < 0.2 and abs(self.robot_y - wpy) < 0.2:
+            #     path = []
+            #     continue
+
+            path.append((wpx,wpy))
+
+        global_path = np.array(path)
+        self.waypoint = global_path[-1]
+
+        for i in range(len(global_path)-5):
+
+            if abs(self.robot_x - global_path[-1][0]) < 0.3 and abs(self.robot_y - global_path[-1][1]) < 0.3:
+                self.reached_goal = 1
+                
+            if abs(self.robot_x - global_path[i][0]) < 0.1 and abs(self.robot_y - global_path[i][1]) < 0.1:
+                index = int((len(global_path) - i)/2)
+                # self.waypoint = global_path[i+index]
+                self.waypoint = global_path[i+5]
+
+                break
+
+
+        print(self.waypoint)
 
     def obstacle_distance_cost(self, trajectory, obstacles):
         min_dis = np.inf
-        for traj in trajectory:
+        min_traj = ()
+        # for traj in trajectory:
         
-            for obs in obstacles:
-
-                dis = self.get_distance(traj[0], traj[1], obs[0], obs[1])
-                # dis = self.get_distance(trajectory[-1][0], trajectory[-1][1], obs[0], obs[1])
+        for obs in obstacles:
+            
+            if trajectory[-1][3] != 0:
+                # dis = self.get_distance(traj[0], traj[1], obs[0], obs[1])
+                dis = self.get_distance(trajectory[-1][0], trajectory[-1][1], obs[0], obs[1])
+                # print(dis,trajectory[-1][0], trajectory[-1][1], obs[0], obs[1])
 
                 if dis < min_dis:
                     min_dis = dis
+                    min_traj = (trajectory[-1][0], trajectory[-1][1], obs[0], obs[1])
+                    # print(1/min_dis,min_traj)
 
-        # print(min_dis)
+            else:
+                return np.inf, min_traj
+
         
-        return 1/min_dis
+        return 1/min_dis,min_traj
  
     def get_distance(self, x1, y1, x2, y2):
-        return np.sqrt((x2-x1)**2 + (y2-y2)**2)    
+        return np.sqrt((x2-x1)**2 + (y2-y1)**2)    
 
     def goal_cost(self, goal, trajectory):
 
@@ -240,7 +302,6 @@ class DWAPlanner(Node):
         y = goal[1] - self.robot_y
 
         theta_goal = np.arctan2(y, x)
-        print(theta_goal)
         goal_cost = abs(theta_goal - trajectory[-1][2])
 
         # print(goal_cost)
@@ -249,7 +310,7 @@ class DWAPlanner(Node):
 
     def local_plan(self, dw, state, params):
         current_state = state[:]
-        min_cost = float("inf")
+        min_cost = np.inf
         best_control = [0.0, 0.0]
         best_trajectory = np.array([current_state])
 
@@ -258,9 +319,9 @@ class DWAPlanner(Node):
         velocity_ = np.arange(dw[0], dw[1], params.v_resolution)
         angular_velocity_ = np.arange(dw[2], dw[3], params.w_resolution)
         cnt = 0
+        cnt2 = 0
         for v in velocity_:
             for w in angular_velocity_:
-                
                 trajectory = self.dwa_functions.predict_trajectory(current_state, v, w, params)
 
                 if v == velocity_[1] and (w == dw[2] or w == angular_velocity_[-1]):
@@ -276,16 +337,19 @@ class DWAPlanner(Node):
                         cnt+=1
 
                 traj_lis.append(trajectory)
-                obs_cost = params.obstacle_cost_gain * (self.obstacle_distance_cost(trajectory, self.obstacles))
+                cost,pts = self.obstacle_distance_cost(trajectory, self.obstacles)
+                obs_cost = params.obstacle_cost_gain * cost
                 speed_cost = params.speed_cost_gain * (params.max_vel - trajectory[-1, 3])
-                goal_cost = self.goal_cost((2.0,2.1),trajectory)
+                goal_cost = params.goal_cost_gain * (self.goal_cost(self.waypoint,trajectory))
 
-                
-                final_cost = goal_cost + speed_cost
+                final_cost = goal_cost + speed_cost + obs_cost
+                # print(obs_cost, final_cost, min_cost)
+                if final_cost < min_cost:
+                    # print('goal cost',goal_cost)
+                    # print('speed cost',speed_cost)
+                    # print('obstacle cost',obs_cost)
+                    # print('final_cost',final_cost)
 
-                if min_cost >= final_cost:
-                    print('goal cost',goal_cost)
-                    print('speed cost',speed_cost)
 
                     min_cost = final_cost
                     best_trajectory = trajectory
