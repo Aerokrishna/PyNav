@@ -1,4 +1,4 @@
-# AUTONOMOUS NAVIGATION IN PYTHON
+# NAVIGATION STACK PYTHON
 
 **Autonomous Navigation Test run on Turtlebot3:**
 - global planner : A-star
