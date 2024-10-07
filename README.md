@@ -1,3 +1,7 @@
 # AUTONOMOUS NAVIGATION IN PYTHON
 
-A-star, DWA planner test run : https://youtu.be/oVkC_Z6I-0c
+Autonomous Navigation Test run on Turtlebot3:
+global planner : A-star
+local planner : DWA planner 
+
+https://youtu.be/oVkC_Z6I-0c
