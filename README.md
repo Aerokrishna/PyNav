@@ -2,7 +2,7 @@
 
 This is repository contains the code base required for autonomous navigation of mobile robots utilizing the state of the art path planning and control algorithms coded in python. This code base has been tested and validated using Turtlebot3 robot simulated on Gazebo. But it can be adapted for any differential drive robot.
 
-![navstack2](https://github.com/user-attachments/assets/094d4b01-ca65-4213-b831-ae722b472e82)
+![navstack2](https://github.com/user-attachments/assets/b99a608c-9f4b-45a3-9a3d-6879694a94dd)
 
 -> make a video which demonstrates working of the global and local planner
 
