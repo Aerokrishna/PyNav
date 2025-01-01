@@ -1,0 +1,13 @@
+# Goal
+float64[] goal_pose_x
+float64[] goal_pose_y
+float64[] goal_pose_theta
+---
+# Result
+float64[] final_pose
+string message
+---
+# Feedback
+float64[] current_goal_pose
+float64[] robot_pose
+float64[] control
