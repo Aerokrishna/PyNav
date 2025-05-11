@@ -65,6 +65,6 @@ def generate_launch_description():
         occupancy_grid_node,
         a_star_planner_node,
         dwa_controller_node,
-        navigation_manager_node
+        navigation_manager_node,
         # rviz_node
     ])

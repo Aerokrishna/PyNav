@@ -1,7 +1,7 @@
 # COSTMAP PARAMS
 costmap :
   ros__parameters:
-    map_name : 'cafe_map_best'
+    map_name : 'robocon_map2'
     map_frame_id : 'map_frame'
     map_orientation : 0.0
     map_origin : [0.0,0.0]

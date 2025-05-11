@@ -111,8 +111,8 @@ class DWAPlanner(LifecycleNode):
             parameters=[
                 ("min_vel", 0.0),
                 ("max_vel", 0.22),
-                ("min_w", -2.84),
-                ("max_w", 2.84),
+                ("min_w", -1.84),
+                ("max_w", 1.84),
                 ("max_accel", 0.3),
                 ("max_w_accel", 1.0),
                 ("time_step", 0.5),
@@ -157,7 +157,7 @@ class DWAPlanner(LifecycleNode):
 
         # subscribe to odom, scan, global_path
         self.scan_sub_ = self.create_subscription(LaserScan, "/scan",self.scan_callback, 10)
-        self.odom_sub_ = self.create_subscription(Odometry,'/odom',self.odom_callback, 10)
+        self.odom_sub_ = self.create_subscription(Odometry,'/odometry/filtered',self.odom_callback, 10)
         self.path_publisher = self.create_subscription(Path, "global_path",self.path_callback, 10)
         self.goal_pose_sub=self.create_subscription(GoalPose, "pynav/goal_pose",self.goal_pose_callback,10)
 
@@ -226,7 +226,8 @@ class DWAPlanner(LifecycleNode):
 
         self.obstacles = []
         # print("heading_space", heading_space)
-        heading_space = [285,75]
+        # heading_space = [285,75]
+        heading_space = [len(self.range_data)-300, 300]
         for i in range(heading_space[1]):
             range_val = self.range_data[i]
             theta = self.angle_min + (i * self.angle_increament)
@@ -267,7 +268,6 @@ class DWAPlanner(LifecycleNode):
 
         # print(len(self.obstacles))
         # self.get_logger().info(f"the best trajectory is {best_traj}")
-        
 
         # self.get_logger().info(f"trajectories {trajs}")
     def counter_delay(self, cnt):
@@ -466,7 +466,6 @@ def main(args=None):
     # executor.add_node(node)
     # executor.spin()
     rclpy.spin(node)
-
     rclpy.shutdown()
 
 # checks if the script is run directly, if not calls the main function

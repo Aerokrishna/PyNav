@@ -33,7 +33,7 @@ class GlobalPath(LifecycleNode):
     def on_configure(self, previous_state: LifecycleState):
 
         self.ogrid_sub_=self.create_subscription(OccupancyGrid, "/occupancy_grid",self.ogrid_callback,10)
-        self.odom_sub=self.create_subscription(Odometry, "/odom",self.odom_callback,10)
+        self.odom_sub=self.create_subscription(Odometry, "/odometry/filtered",self.odom_callback,10)
         self.goal_pose_sub=self.create_subscription(GoalPose, "pynav/goal_pose",self.goal_pose_callback,10)
         
         self.path_publisher = self.create_lifecycle_publisher(Path, "/global_path",10)
